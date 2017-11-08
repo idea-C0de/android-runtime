@@ -45,8 +45,6 @@ version of the {N} CLI install a previous version of the runtime package - 'tns 
 project.ext.extractedDependenciesDir = "${project.buildDir}/exploded-dependencies";
 def nativescriptDependencies = new JsonSlurper().parseText(dependenciesJson.text)
 
-def packageJsonContents = [:]
-
 def dontRunSbg = project.hasProperty("dontRunSbg");
 def asbgProject = project(":asbg")
 asbgProject.ext.outDir = new File("$projectDir", "src/main/java")
@@ -58,6 +56,48 @@ def computeBuildToolsVersion = { -> project.hasProperty("buildToolsVersion") ? b
 
 project.ext.selectedBuildType = project.hasProperty("release") ? "release" : "debug"
 
+def getAppIdentifier (packageJsonMap) {
+	def appIdentifier = "";
+	if(packageJsonMap){
+		appIdentifier = packageJsonMap.nativescript.id;
+		if (!(appIdentifier instanceof String))
+		{
+			appIdentifier = appIdentifier.android;
+		}
+	}
+
+	return appIdentifier;
+}
+
+task setAppIdentifier {
+	println "$configStage setting applicationId";
+	File packageJsonFile = new File("$rootDir/../../package.json");
+
+	if(packageJsonFile.exists())
+	{
+		def content = packageJsonFile.getText("UTF-8");
+		def jsonSlurper = new JsonSlurper();
+		def packageJsonMap = jsonSlurper.parseText(content);
+		def appIdentifier = getAppIdentifier(packageJsonMap);
+
+		if(appIdentifier)
+		{
+			project.ext.nsApplicationIdentifier = appIdentifier;
+			android.defaultConfig.applicationId = appIdentifier;
+		}
+	}
+}
+
+def getProjectName () {
+		if(project.hasProperty("nsApplicationIdentifier")){
+			def parts = project.nsApplicationIdentifier.split(/[.]/);
+
+			return parts.last();
+		}
+
+		return rootProject.name;
+}
+
 def renameResultApks = { variant ->
 	def name
 	variant.outputs.each { output ->
@@ -66,7 +106,7 @@ def renameResultApks = { variant ->
 		if (output.getFilter(com.android.build.OutputFile.ABI)) {
 			abiName = "-" + output.getFilter(com.android.build.OutputFile.ABI);
 		}
-		def apkNamePrefix = rootProject.name + "-" + variant.buildType.name + abiName
+		def apkNamePrefix = getProjectName() + "-" + variant.buildType.name + abiName
 		name = apkNamePrefix + ".apk"
 		output.packageApplication.outputFile = new File(apkDirectory, name);
 	}
@@ -636,18 +676,13 @@ copyTypings.onlyIf { generateTypescriptDefinitions.didWork }
 
 task validateAppIdMatch {
 	doLast {
-		def packageJsonFile = new File("$rootDir/../../package.json");
 		def lineSeparator = System.getProperty("line.separator");
 
-		if (packageJsonFile.exists() && !project.hasProperty("release")) {
-			String content = packageJsonFile.getText("UTF-8")
-			def jsonSlurper = new JsonSlurper()
-			def packageJsonMap = jsonSlurper.parseText(content)
-
-			if (packageJsonMap.nativescript.id != android.defaultConfig.applicationId) {
+		if (project.hasProperty("nsApplicationIdentifier") && !project.hasProperty("release")) {
+			if(project.nsApplicationIdentifier != android.defaultConfig.applicationId) {
 				def errorMessage = "${lineSeparator}WARNING: The Application identifier is different from the one inside 'package.json' file.$lineSeparator" +
 						"NativeScript CLI might not work properly.$lineSeparator" +
-						"Update the application identifier in package.json and app.gradle so that they match.";
+						"Remove applicationId from app.gradle and update the \"nativescript.id\" in package.json as follows {\"ios\": \"\" , \"android\": \"\"}.";
 				logger.error(errorMessage);
 			}
 		}
