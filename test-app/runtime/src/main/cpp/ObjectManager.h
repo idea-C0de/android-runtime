@@ -231,6 +231,8 @@ class ObjectManager {
 
         jmethodID MAKE_INSTANCE_WEAK_AND_CHECK_IF_ALIVE_METHOD_ID;
 
+        jmethodID CHECK_ID_IS_WEAK;
+
         jmethodID CHECK_WEAK_OBJECTS_ARE_ALIVE_METHOD_ID;
 
         v8::Persistent<v8::Function>* m_poJsWrapperFunc;

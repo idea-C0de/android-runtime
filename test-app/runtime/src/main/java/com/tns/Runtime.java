@@ -9,6 +9,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.security.InvalidParameterException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -207,7 +208,7 @@ public class Runtime {
         if (staticConfiguration != null && staticConfiguration.appConfig != null) {
             return staticConfiguration.appConfig.getMarkingMode().ordinal();
         } else {
-            return ((MarkingMode)AppConfig.KnownKeys.MarkingMode.getDefaultValue()).ordinal();
+            return ((MarkingMode) AppConfig.KnownKeys.MarkingMode.getDefaultValue()).ordinal();
         }
     }
 
@@ -319,7 +320,7 @@ public class Runtime {
                     }
 
                     /*
-                    	Send a message to the Main Thread to `shake hands`,
+                        Send a message to the Main Thread to `shake hands`,
                     	Main Thread will cache the Worker Handler for later use
                      */
                     Message msg = Message.obtain();
@@ -355,7 +356,7 @@ public class Runtime {
         @Override
         public void handleMessage(Message msg) {
             /*
-            	Handle messages coming from a Worker thread
+                Handle messages coming from a Worker thread
              */
             if (msg.arg1 == MessageType.WorkerToMain) {
                 /*
@@ -364,7 +365,7 @@ public class Runtime {
                 WorkerObjectOnMessageCallback(Runtime.getCurrentRuntime().runtimeId, msg.arg2, msg.obj.toString());
             }
             /*
-            	Handle a 'Handshake' message sent from a new Worker,
+                Handle a 'Handshake' message sent from a new Worker,
             	so that the Main may cache it and send messages to it later
              */
             else if (msg.arg1 == MessageType.Handshake) {
@@ -814,35 +815,54 @@ public class Runtime {
         }
     }
 
+    private HashMap<Integer, Boolean> idToWeakMapCache = new HashMap<>();
+
     @RuntimeCallable
-    private boolean makeInstanceWeakAndCheckIfAlive(int javaObjectID) {
-        if (logger.isEnabled()) {
-            logger.write("makeInstanceWeakAndCheckIfAlive instance " + javaObjectID);
+    private boolean checkIdIsWeak(int javaObjectID) {
+        if (idToWeakMapCache.isEmpty()) {
+            throw new InvalidParameterException("#### cache is empty");
         }
+
+        Boolean id = idToWeakMapCache.get(javaObjectID);
+        if (id == null) {
+            throw new InvalidParameterException("#### id is null");
+        }
+
+        return id;
+    }
+
+    @RuntimeCallable
+    private void moveFromStrongToWeak(int javaObjectID) {
         Object instance = strongInstances.get(javaObjectID);
-        if (instance == null) {
-            WeakReference<Object> ref = weakInstances.get(javaObjectID);
-            if (ref == null) {
-                return false;
-            } else {
-                instance = ref.get();
-                if (instance == null) {
-                    // The Java was moved from strong to weak, and then the Java instance was collected.
-                    weakInstances.remove(javaObjectID);
-                    weakJavaObjectToID.remove(javaObjectID);
-                    return false;
-                } else {
-                    return true;
-                }
-            }
-        } else {
+        if (instance != null) {
             strongInstances.remove(javaObjectID);
             strongJavaObjectToID.remove(instance);
-
             weakJavaObjectToID.put(instance, javaObjectID);
             weakInstances.put(javaObjectID, new WeakReference<Object>(instance));
+        }
+    }
 
-            return true;
+    @RuntimeCallable
+    private void makeInstanceWeakAndCheckIfAlive() {
+        idToWeakMapCache = new HashMap<>();
+
+
+        for (Integer key : weakInstances.keySet()) {
+            WeakReference<Object> ref = weakInstances.get(key);
+
+            if (ref != null) {
+                Object instance = ref.get();
+                if (instance == null) {
+                    // The Java was moved from strong to weak, and then the Java instance was collected.
+                    weakInstances.remove(key);
+                    weakJavaObjectToID.remove(key);
+                    idToWeakMapCache.put(key, false);
+                } else {
+                    idToWeakMapCache.put(key, true);
+                }
+            } else {
+                idToWeakMapCache.put(key, false);
+            }
         }
     }
 

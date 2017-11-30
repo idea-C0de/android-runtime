@@ -36,8 +36,11 @@ ObjectManager::ObjectManager(jobject javaRuntimeObject) :
     MAKE_INSTANCE_WEAK_BATCH_METHOD_ID = m_env.GetMethodID(runtimeClass, "makeInstanceWeak", "(Ljava/nio/ByteBuffer;IZ)V");
     assert(MAKE_INSTANCE_WEAK_BATCH_METHOD_ID != nullptr);
 
-    MAKE_INSTANCE_WEAK_AND_CHECK_IF_ALIVE_METHOD_ID = m_env.GetMethodID(runtimeClass, "makeInstanceWeakAndCheckIfAlive", "(I)Z");
+    MAKE_INSTANCE_WEAK_AND_CHECK_IF_ALIVE_METHOD_ID = m_env.GetMethodID(runtimeClass, "makeInstanceWeakAndCheckIfAlive", "([I)V");
     assert(MAKE_INSTANCE_WEAK_AND_CHECK_IF_ALIVE_METHOD_ID != nullptr);
+
+    CHECK_ID_IS_WEAK = m_env.GetMethodID(runtimeClass, "checkIdIsWeak", "(I)Z");
+    assert(CHECK_ID_IS_WEAK != nullptr);
 
     CHECK_WEAK_OBJECTS_ARE_ALIVE_METHOD_ID = m_env.GetMethodID(runtimeClass, "checkWeakObjectAreAlive", "(Ljava/nio/ByteBuffer;Ljava/nio/ByteBuffer;I)V");
     assert(CHECK_WEAK_OBJECTS_ARE_ALIVE_METHOD_ID != nullptr);
@@ -305,6 +308,11 @@ void ObjectManager::JSObjectFinalizer(Isolate* isolate, ObjectWeakCallbackState*
     }
 
     auto javaObjectID = jsInstanceInfo->JavaObjectID;
+    //TODO: move references to weak
+    // moveFromStrongToWeak(javaObjectID)
+
+    //TODO: check if the object is alive and revive or reset accordingly
+    // checkIdIsWeak(javaObjectID)
     jboolean isJavaInstanceAlive = m_env.CallBooleanMethod(m_javaRuntimeObject, MAKE_INSTANCE_WEAK_AND_CHECK_IF_ALIVE_METHOD_ID, javaObjectID);
     if (isJavaInstanceAlive) {
         // If the Java instance is alive, keep the JavaScript instance alive.
@@ -633,6 +641,8 @@ void ObjectManager::OnGcFinishedStatic(Isolate* isolate, GCType type, GCCallback
 void ObjectManager::OnGcStarted(GCType type, GCCallbackFlags flags) {
     TNSPERF();
 
+    //TODO: memoization here
+    //makeInstanceWeakAndCheckIfAlive
     GarbageCollectionInfo gcInfo(++m_numberOfGC);
     m_markedForGC.push(gcInfo);
 }
