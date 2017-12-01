@@ -27,22 +27,35 @@ ObjectManager::ObjectManager(jobject javaRuntimeObject) :
     auto runtimeClass = m_env.FindClass("com/tns/Runtime");
     assert(runtimeClass != nullptr);
 
-    GET_JAVAOBJECT_BY_ID_METHOD_ID = m_env.GetMethodID(runtimeClass, "getJavaObjectByID", "(I)Ljava/lang/Object;");
+    GET_JAVAOBJECT_BY_ID_METHOD_ID =
+        m_env.GetMethodID(runtimeClass, "getJavaObjectByID", "(I)Ljava/lang/Object;");
     assert(GET_JAVAOBJECT_BY_ID_METHOD_ID != nullptr);
 
-    GET_OR_CREATE_JAVA_OBJECT_ID_METHOD_ID = m_env.GetMethodID(runtimeClass, "getOrCreateJavaObjectID", "(Ljava/lang/Object;)I");
+    GET_OR_CREATE_JAVA_OBJECT_ID_METHOD_ID =
+        m_env.GetMethodID(runtimeClass, "getOrCreateJavaObjectID", "(Ljava/lang/Object;)I");
     assert(GET_OR_CREATE_JAVA_OBJECT_ID_METHOD_ID != nullptr);
 
-    MAKE_INSTANCE_WEAK_BATCH_METHOD_ID = m_env.GetMethodID(runtimeClass, "makeInstanceWeak", "(Ljava/nio/ByteBuffer;IZ)V");
+    MAKE_INSTANCE_WEAK_BATCH_METHOD_ID =
+        m_env.GetMethodID(runtimeClass, "makeInstanceWeak", "(Ljava/nio/ByteBuffer;IZ)V");
     assert(MAKE_INSTANCE_WEAK_BATCH_METHOD_ID != nullptr);
 
-    MAKE_INSTANCE_WEAK_AND_CHECK_IF_ALIVE_METHOD_ID = m_env.GetMethodID(runtimeClass, "makeInstanceWeakAndCheckIfAlive", "([I)V");
+    MAKE_INSTANCE_WEAK_AND_CHECK_IF_ALIVE_METHOD_ID =
+        m_env.GetMethodID(runtimeClass, "makeInstanceWeakAndCheckIfAlive", "()V");
     assert(MAKE_INSTANCE_WEAK_AND_CHECK_IF_ALIVE_METHOD_ID != nullptr);
+
+    CLEAN_UP_MEMOIZED_WEAK_MAP_CACHE =
+        m_env.GetMethodID(runtimeClass, "cleanUpMemoizedWeakMapCache", "()V");
+    assert(CLEAN_UP_MEMOIZED_WEAK_MAP_CACHE != nullptr);
 
     CHECK_ID_IS_WEAK = m_env.GetMethodID(runtimeClass, "checkIdIsWeak", "(I)Z");
     assert(CHECK_ID_IS_WEAK != nullptr);
 
-    CHECK_WEAK_OBJECTS_ARE_ALIVE_METHOD_ID = m_env.GetMethodID(runtimeClass, "checkWeakObjectAreAlive", "(Ljava/nio/ByteBuffer;Ljava/nio/ByteBuffer;I)V");
+    MOVE_FROM_STRONG_TO_WEAK = m_env.GetMethodID(runtimeClass, "moveFromStrongToWeak", "(I)V");
+    assert(MOVE_FROM_STRONG_TO_WEAK != nullptr);
+
+    CHECK_WEAK_OBJECTS_ARE_ALIVE_METHOD_ID = m_env.GetMethodID(runtimeClass,
+            "checkWeakObjectAreAlive",
+            "(Ljava/nio/ByteBuffer;Ljava/nio/ByteBuffer;I)V");
     assert(CHECK_WEAK_OBJECTS_ARE_ALIVE_METHOD_ID != nullptr);
 
     JAVA_LANG_CLASS = m_env.FindClass("java/lang/Class");
@@ -57,7 +70,8 @@ ObjectManager::ObjectManager(jobject javaRuntimeObject) :
     auto useGlobalRefs = m_env.CallStaticBooleanMethod(runtimeClass, useGlobalRefsMethodID);
     m_useGlobalRefs = useGlobalRefs == JNI_TRUE;
 
-    auto getMarkingModeOrdinalMethodID = m_env.GetMethodID(runtimeClass, "getMarkingModeOrdinal", "()I");
+    auto getMarkingModeOrdinalMethodID =
+        m_env.GetMethodID(runtimeClass, "getMarkingModeOrdinal", "()I");
     jint markingMode = m_env.CallIntMethod(m_javaRuntimeObject, getMarkingModeOrdinalMethodID);
     m_markingMode = static_cast<JavaScriptMarkingMode>(markingMode);
 }
@@ -72,12 +86,11 @@ void ObjectManager::Init(Isolate* isolate) {
     auto jsWrapperFunc = jsWrapperFuncTemplate->GetFunction();
     m_poJsWrapperFunc = new Persistent<Function>(isolate, jsWrapperFunc);
 
+    isolate->AddGCPrologueCallback(ObjectManager::OnGcStartedStatic, kGCTypeAll);
     if (m_markingMode != JavaScriptMarkingMode::None) {
-        isolate->AddGCPrologueCallback(ObjectManager::OnGcStartedStatic, kGCTypeAll);
         isolate->AddGCEpilogueCallback(ObjectManager::OnGcFinishedStatic, kGCTypeAll);
     }
 }
-
 
 JniLocalRef ObjectManager::GetJavaObjectByJsObject(const Local<Object>& object) {
     JSInstanceInfo* jsInstanceInfo = GetJSInstanceInfo(object);
@@ -113,7 +126,8 @@ ObjectManager::JSInstanceInfo* ObjectManager::GetJSInstanceInfoFromRuntimeObject
         auto prototypeObject = object->GetPrototype().As<Object>();
 
         if (!prototypeObject.IsEmpty() && prototypeObject->IsObject()) {
-            DEBUG_WRITE("GetJSInstanceInfo: need to check prototype :%d", prototypeObject->GetIdentityHash());
+            DEBUG_WRITE("GetJSInstanceInfo: need to check prototype :%d",
+                        prototypeObject->GetIdentityHash());
             if (IsJsRuntimeObject(prototypeObject)) {
                 jsInfo = prototypeObject->GetInternalField(jsInfoIdx);
             }
@@ -141,7 +155,8 @@ jweak ObjectManager::GetJavaObjectByID(uint32_t javaObjectID) {
 }
 
 jobject ObjectManager::GetJavaObjectByIDImpl(uint32_t javaObjectID) {
-    jobject object = m_env.CallObjectMethod(m_javaRuntimeObject, GET_JAVAOBJECT_BY_ID_METHOD_ID, javaObjectID);
+    jobject object =
+        m_env.CallObjectMethod(m_javaRuntimeObject, GET_JAVAOBJECT_BY_ID_METHOD_ID, javaObjectID);
     return object;
 }
 
@@ -164,7 +179,8 @@ void ObjectManager::SetJavaClass(const Local<Object>& instance, jclass clazz) {
 }
 
 int ObjectManager::GetOrCreateObjectId(jobject object) {
-    jint javaObjectID = m_env.CallIntMethod(m_javaRuntimeObject, GET_OR_CREATE_JAVA_OBJECT_ID_METHOD_ID, object);
+    jint javaObjectID =
+        m_env.CallIntMethod(m_javaRuntimeObject, GET_OR_CREATE_JAVA_OBJECT_ID_METHOD_ID, object);
 
     return javaObjectID;
 }
@@ -184,18 +200,21 @@ Local<Object> ObjectManager::GetJsObjectByJavaObject(int javaObjectID) {
     return handleScope.Escape(localObject);
 }
 
-
 Local<Object> ObjectManager::CreateJSWrapper(jint javaObjectID, const string& typeName) {
     return CreateJSWrapperHelper(javaObjectID, typeName, nullptr);
 }
 
-Local<Object> ObjectManager::CreateJSWrapper(jint javaObjectID, const string& typeName, jobject instance) {
+Local<Object> ObjectManager::CreateJSWrapper(jint javaObjectID,
+        const string& typeName,
+        jobject instance) {
     JniLocalRef clazz(m_env.GetObjectClass(instance));
 
     return CreateJSWrapperHelper(javaObjectID, typeName, clazz);
 }
 
-Local<Object> ObjectManager::CreateJSWrapperHelper(jint javaObjectID, const string& typeName, jclass clazz) {
+Local<Object> ObjectManager::CreateJSWrapperHelper(jint javaObjectID,
+        const string& typeName,
+        jclass clazz) {
     auto isolate = m_isolate;
 
     auto className = (clazz != nullptr) ? GetClassName(clazz) : typeName;
@@ -211,7 +230,6 @@ Local<Object> ObjectManager::CreateJSWrapperHelper(jint javaObjectID, const stri
     return jsWrapper;
 }
 
-
 /* *
  * Link the JavaScript object and it's java counterpart with an ID
  */
@@ -223,7 +241,9 @@ void ObjectManager::Link(const Local<Object>& object, uint32_t javaObjectID, jcl
 
     auto isolate = m_isolate;
 
-    DEBUG_WRITE("Linking js object: %d and java instance id: %d", object->GetIdentityHash(), javaObjectID);
+    DEBUG_WRITE("Linking js object: %d and java instance id: %d",
+                object->GetIdentityHash(),
+                javaObjectID);
 
     auto jsInstanceInfo = new JSInstanceInfo(false/*isJavaObjWeak*/, javaObjectID, clazz);
 
@@ -308,12 +328,13 @@ void ObjectManager::JSObjectFinalizer(Isolate* isolate, ObjectWeakCallbackState*
     }
 
     auto javaObjectID = jsInstanceInfo->JavaObjectID;
-    //TODO: move references to weak
-    // moveFromStrongToWeak(javaObjectID)
 
-    //TODO: check if the object is alive and revive or reset accordingly
-    // checkIdIsWeak(javaObjectID)
-    jboolean isJavaInstanceAlive = m_env.CallBooleanMethod(m_javaRuntimeObject, MAKE_INSTANCE_WEAK_AND_CHECK_IF_ALIVE_METHOD_ID, javaObjectID);
+    m_env.CallVoidMethod(m_javaRuntimeObject, MAKE_INSTANCE_WEAK_AND_CHECK_IF_ALIVE_METHOD_ID);
+
+    // TODO: plamen5kov
+    m_env.CallVoidMethod(m_javaRuntimeObject, MOVE_FROM_STRONG_TO_WEAK, javaObjectID);
+    auto isJavaInstanceAlive = m_env.CallBooleanMethod(m_javaRuntimeObject, CHECK_ID_IS_WEAK, javaObjectID);
+
     if (isJavaInstanceAlive) {
         // If the Java instance is alive, keep the JavaScript instance alive.
         po->SetWeak(callbackState, JSObjectFinalizerStatic, WeakCallbackType::kFinalizer);
@@ -407,7 +428,8 @@ void ObjectManager::ReleaseRegularObjects() {
 
     HandleScope handleScope(m_isolate);
 
-    auto propName = String::NewFromUtf8(m_isolate, "t::gcNum", NewStringType::kNormal).ToLocalChecked();
+    auto propName =
+        String::NewFromUtf8(m_isolate, "t::gcNum", NewStringType::kNormal).ToLocalChecked();
 
     auto& topGCInfo = m_markedForGC.top();
     auto& marked = topGCInfo.markedForGC;
@@ -511,7 +533,8 @@ void ObjectManager::MarkReachableObjects(Isolate* isolate, const Local<Object>& 
             auto func = o.As<Function>();
 
             int closureObjectLength;
-            auto closureObjects = NativeScriptExtension::GetClosureObjects(isolate, func, &closureObjectLength);
+            auto closureObjects =
+                NativeScriptExtension::GetClosureObjects(isolate, func, &closureObjectLength);
             for (int i = 0; i < closureObjectLength; i++) {
                 auto& curV = *(closureObjects + i);
                 if (!curV.IsEmpty() && curV->IsObject()) {
@@ -548,7 +571,9 @@ void ObjectManager::MarkReachableObjects(Isolate* isolate, const Local<Object>& 
 
                     if (!getter.IsEmpty() && getter->IsFunction()) {
                         int getterClosureObjectLength = 0;
-                        auto getterClosureObjects = NativeScriptExtension::GetClosureObjects(isolate, getter.As<Function>(), &getterClosureObjectLength);
+                        auto getterClosureObjects = NativeScriptExtension::GetClosureObjects(isolate,
+                                                    getter.As<Function>(),
+                                                    &getterClosureObjectLength);
                         for (int i = 0; i < getterClosureObjectLength; i++) {
                             auto& curV = *(getterClosureObjects + i);
                             if (!curV.IsEmpty() && curV->IsObject()) {
@@ -560,7 +585,9 @@ void ObjectManager::MarkReachableObjects(Isolate* isolate, const Local<Object>& 
 
                     if (!setter.IsEmpty() && setter->IsFunction()) {
                         int setterClosureObjectLength = 0;
-                        auto setterClosureObjects = NativeScriptExtension::GetClosureObjects(isolate, setter.As<Function>(), &setterClosureObjectLength);
+                        auto setterClosureObjects = NativeScriptExtension::GetClosureObjects(isolate,
+                                                    setter.As<Function>(),
+                                                    &setterClosureObjectLength);
                         for (int i = 0; i < setterClosureObjectLength; i++) {
                             auto& curV = *(setterClosureObjects + i);
                             if (!curV.IsEmpty() && curV->IsObject()) {
@@ -641,51 +668,52 @@ void ObjectManager::OnGcFinishedStatic(Isolate* isolate, GCType type, GCCallback
 void ObjectManager::OnGcStarted(GCType type, GCCallbackFlags flags) {
     TNSPERF();
 
-    //TODO: memoization here
-    //makeInstanceWeakAndCheckIfAlive
-    GarbageCollectionInfo gcInfo(++m_numberOfGC);
-    m_markedForGC.push(gcInfo);
+    //TODO: plamen5kov
+    m_env.CallVoidMethod(m_javaRuntimeObject, CLEAN_UP_MEMOIZED_WEAK_MAP_CACHE);
+
+//  GarbageCollectionInfo gcInfo(++m_numberOfGC);
+//  m_markedForGC.push(gcInfo);
 }
 
 /*
  * When GC is called we need to evaluate the situation and decide what js objects to release
  * */
 void ObjectManager::OnGcFinished(GCType type, GCCallbackFlags flags) {
-    assert(!m_markedForGC.empty());
-
-    //deal with all "callback" objects
-    auto isolate = m_isolate;
-    for (auto weakObj : m_implObjWeak) {
-        auto obj = Local<Object>::New(isolate, *weakObj.po);
-        MarkReachableObjects(isolate, obj);
-    }
-    for (const auto& kv : m_implObjStrong) {
-        Persistent<Object>* po = kv.second;
-        if (po != nullptr) {
-            auto obj = Local<Object>::New(isolate, *po);
-            MarkReachableObjects(isolate, obj);
-        }
-    }
-
-    //deal with regular objects
-    ReleaseRegularObjects();
-
-    m_markedForGC.pop();
-
-    if (m_markedForGC.empty()) {
-        MakeRegularObjectsWeak(m_released.m_IDs, m_buff);
-
-        MakeImplObjectsWeak(m_implObjStrong, m_buff);
-
-        CheckWeakObjectsAreAlive(m_implObjWeak, m_buff, m_outBuff);
-
-        m_buff.Reset();
-        m_released.clear();
-        m_visited.clear();
-        m_visitedPOs.clear();
-        m_implObjWeak.clear();
-        m_implObjStrong.clear();
-    }
+//  assert(!m_markedForGC.empty());
+//
+//  //deal with all "callback" objects
+//  auto isolate = m_isolate;
+//  for (auto weakObj : m_implObjWeak) {
+//    auto obj = Local<Object>::New(isolate, *weakObj.po);
+//    MarkReachableObjects(isolate, obj);
+//  }
+//  for (const auto &kv : m_implObjStrong) {
+//    Persistent<Object> *po = kv.second;
+//    if (po != nullptr) {
+//      auto obj = Local<Object>::New(isolate, *po);
+//      MarkReachableObjects(isolate, obj);
+//    }
+//  }
+//
+//  //deal with regular objects
+//  ReleaseRegularObjects();
+//
+//  m_markedForGC.pop();
+//
+//  if (m_markedForGC.empty()) {
+//    MakeRegularObjectsWeak(m_released.m_IDs, m_buff);
+//
+//    MakeImplObjectsWeak(m_implObjStrong, m_buff);
+//
+//    CheckWeakObjectsAreAlive(m_implObjWeak, m_buff, m_outBuff);
+//
+//    m_buff.Reset();
+//    m_released.clear();
+//    m_visited.clear();
+//    m_visitedPOs.clear();
+//    m_implObjWeak.clear();
+//    m_implObjStrong.clear();
+//  }
 }
 
 /*
@@ -700,7 +728,11 @@ void ObjectManager::MakeRegularObjectsWeak(const set<int>& instances, DirectBuff
 
         if (!success) {
             int length = inputBuff.Length();
-            m_env.CallVoidMethod(m_javaRuntimeObject, MAKE_INSTANCE_WEAK_BATCH_METHOD_ID, (jobject) inputBuff, length, keepAsWeak);
+            m_env.CallVoidMethod(m_javaRuntimeObject,
+                                 MAKE_INSTANCE_WEAK_BATCH_METHOD_ID,
+                                 (jobject) inputBuff,
+                                 length,
+                                 keepAsWeak);
             inputBuff.Reset();
             success = inputBuff.Write(javaObjectId);
             assert(success);
@@ -708,7 +740,11 @@ void ObjectManager::MakeRegularObjectsWeak(const set<int>& instances, DirectBuff
     }
     int size = inputBuff.Size();
     if (size > 0) {
-        m_env.CallVoidMethod(m_javaRuntimeObject, MAKE_INSTANCE_WEAK_BATCH_METHOD_ID, (jobject) inputBuff, size, keepAsWeak);
+        m_env.CallVoidMethod(m_javaRuntimeObject,
+                             MAKE_INSTANCE_WEAK_BATCH_METHOD_ID,
+                             (jobject) inputBuff,
+                             size,
+                             keepAsWeak);
     }
 
     inputBuff.Reset();
@@ -719,7 +755,8 @@ void ObjectManager::MakeRegularObjectsWeak(const set<int>& instances, DirectBuff
  * so we tell java to take the JAVA objects out of strong, BUT KEEP THEM AS WEEK REFERENCES,
  * so that if java needs to release them, it can, on a later stage.
  * */
-void ObjectManager::MakeImplObjectsWeak(const map<int, Persistent<Object>*>& instances, DirectBuffer& inputBuff) {
+void ObjectManager::MakeImplObjectsWeak(const map<int, Persistent<Object> *>& instances,
+                                        DirectBuffer& inputBuff) {
     jboolean keepAsWeak = JNI_TRUE;
 
     for (const auto& kv : instances) {
@@ -731,7 +768,11 @@ void ObjectManager::MakeImplObjectsWeak(const map<int, Persistent<Object>*>& ins
             if (!success) {
                 int length = inputBuff.Length();
                 jboolean keepAsWeak = JNI_TRUE;
-                m_env.CallVoidMethod(m_javaRuntimeObject, MAKE_INSTANCE_WEAK_BATCH_METHOD_ID, (jobject) inputBuff, length, keepAsWeak);
+                m_env.CallVoidMethod(m_javaRuntimeObject,
+                                     MAKE_INSTANCE_WEAK_BATCH_METHOD_ID,
+                                     (jobject) inputBuff,
+                                     length,
+                                     keepAsWeak);
                 inputBuff.Reset();
                 success = inputBuff.Write(javaObjectId);
                 assert(success);
@@ -741,7 +782,11 @@ void ObjectManager::MakeImplObjectsWeak(const map<int, Persistent<Object>*>& ins
     int size = inputBuff.Size();
     if (size > 0) {
         jboolean keepAsWeak = JNI_TRUE;
-        m_env.CallVoidMethod(m_javaRuntimeObject, MAKE_INSTANCE_WEAK_BATCH_METHOD_ID, (jobject) inputBuff, size, keepAsWeak);
+        m_env.CallVoidMethod(m_javaRuntimeObject,
+                             MAKE_INSTANCE_WEAK_BATCH_METHOD_ID,
+                             (jobject) inputBuff,
+                             size,
+                             keepAsWeak);
     }
 
     inputBuff.Reset();
@@ -751,7 +796,9 @@ void ObjectManager::MakeImplObjectsWeak(const map<int, Persistent<Object>*>& ins
  * Consult with JAVA world to check if a java object is still in kept as a strong or weak reference
  * If the JAVA objects are released, we can release the their counterpart JS objects
  * */
-void ObjectManager::CheckWeakObjectsAreAlive(const vector<PersistentObjectIdPair>& instances, DirectBuffer& inputBuff, DirectBuffer& outputBuff) {
+void ObjectManager::CheckWeakObjectsAreAlive(const vector<PersistentObjectIdPair>& instances,
+        DirectBuffer& inputBuff,
+        DirectBuffer& outputBuff) {
     TNSPERF();
 
     for (const auto& poIdPair : instances) {
@@ -761,7 +808,11 @@ void ObjectManager::CheckWeakObjectsAreAlive(const vector<PersistentObjectIdPair
 
         if (!success) {
             int length = inputBuff.Length();
-            m_env.CallVoidMethod(m_javaRuntimeObject, CHECK_WEAK_OBJECTS_ARE_ALIVE_METHOD_ID, (jobject) inputBuff, (jobject) outputBuff, length);
+            m_env.CallVoidMethod(m_javaRuntimeObject,
+                                 CHECK_WEAK_OBJECTS_ARE_ALIVE_METHOD_ID,
+                                 (jobject) inputBuff,
+                                 (jobject) outputBuff,
+                                 length);
             //
             int* released = outputBuff.GetData();
             for (int i = 0; i < length; i++) {
@@ -780,7 +831,11 @@ void ObjectManager::CheckWeakObjectsAreAlive(const vector<PersistentObjectIdPair
     }
     int size = inputBuff.Size();
     if (size > 0) {
-        m_env.CallVoidMethod(m_javaRuntimeObject, CHECK_WEAK_OBJECTS_ARE_ALIVE_METHOD_ID, (jobject) inputBuff, (jobject) outputBuff, size);
+        m_env.CallVoidMethod(m_javaRuntimeObject,
+                             CHECK_WEAK_OBJECTS_ARE_ALIVE_METHOD_ID,
+                             (jobject) inputBuff,
+                             (jobject) outputBuff,
+                             size);
         int* released = outputBuff.GetData();
         for (int i = 0; i < size; i++) {
             bool isReleased = *released++ != 0;

@@ -33,7 +33,9 @@ class ObjectManager {
 
         v8::Local<v8::Object> CreateJSWrapper(jint javaObjectID, const std::string& typeName);
 
-        v8::Local<v8::Object> CreateJSWrapper(jint javaObjectID, const std::string& typeName, jobject instance);
+        v8::Local<v8::Object> CreateJSWrapper(jint javaObjectID,
+                                              const std::string& typeName,
+                                              jobject instance);
 
         void Link(const v8::Local<v8::Object>& object, uint32_t javaObjectID, jclass clazz);
 
@@ -49,7 +51,8 @@ class ObjectManager {
 
         v8::Local<v8::Object> GetEmptyObject(v8::Isolate* isolate);
 
-        static void MarkReachableArrayElements(v8::Local<v8::Object>& o, std::stack<v8::Local<v8::Value>>& s);
+        static void MarkReachableArrayElements(v8::Local<v8::Object>& o,
+                                               std::stack<v8::Local<v8::Value>>& s);
 
         enum class MetadataNodeKeys {
             JsInfo,
@@ -78,7 +81,7 @@ class ObjectManager {
         struct JSInstanceInfo {
             public:
                 JSInstanceInfo(bool isJavaObjectWeak, uint32_t javaObjectID, jclass claz)
-                    :IsJavaObjectWeak(isJavaObjectWeak), JavaObjectID(javaObjectID), ObjectClazz(claz) {
+                    : IsJavaObjectWeak(isJavaObjectWeak), JavaObjectID(javaObjectID), ObjectClazz(claz) {
                 }
 
                 bool IsJavaObjectWeak;
@@ -87,7 +90,9 @@ class ObjectManager {
         };
 
         struct ObjectWeakCallbackState {
-            ObjectWeakCallbackState(ObjectManager* _thisPtr, JSInstanceInfo* _jsInfo, v8::Persistent<v8::Object>* _target)
+            ObjectWeakCallbackState(ObjectManager* _thisPtr,
+                                    JSInstanceInfo* _jsInfo,
+                                    v8::Persistent<v8::Object>* _target)
                 :
                 thisPtr(_thisPtr), jsInfo(_jsInfo), target(_target) {
             }
@@ -102,7 +107,7 @@ class ObjectManager {
                 :
                 numberOfGC(_numberOfGC) {
             }
-            std::vector<v8::Persistent<v8::Object>*> markedForGC;
+            std::vector<v8::Persistent<v8::Object> *> markedForGC;
             int numberOfGC;
         };
 
@@ -126,7 +131,7 @@ class ObjectManager {
                     return m_POs.find(po) != m_POs.end();
                 }
 
-                std::set<v8::Persistent<v8::Object>*> m_POs;
+                std::set<v8::Persistent<v8::Object> *> m_POs;
                 std::set<int> m_IDs;
         };
 
@@ -151,11 +156,16 @@ class ObjectManager {
 
         void MakeRegularObjectsWeak(const std::set<int>& instances, DirectBuffer& inputBuff);
 
-        void MakeImplObjectsWeak(const std::map<int, v8::Persistent<v8::Object>*>& instances, DirectBuffer& inputBuff);
+        void MakeImplObjectsWeak(const std::map<int, v8::Persistent<v8::Object> *>& instances,
+                                 DirectBuffer& inputBuff);
 
-        void CheckWeakObjectsAreAlive(const std::vector<PersistentObjectIdPair>& instances, DirectBuffer& inputBuff, DirectBuffer& outputBuff);
+        void CheckWeakObjectsAreAlive(const std::vector<PersistentObjectIdPair>& instances,
+                                      DirectBuffer& inputBuff,
+                                      DirectBuffer& outputBuff);
 
-        v8::Local<v8::Object> CreateJSWrapperHelper(jint javaObjectID, const std::string& typeName, jclass clazz);
+        v8::Local<v8::Object> CreateJSWrapperHelper(jint javaObjectID,
+                const std::string& typeName,
+                jclass clazz);
 
         static void JSObjectWeakCallbackStatic(const v8::WeakCallbackInfo<ObjectWeakCallbackState>& data);
 
@@ -197,7 +207,7 @@ class ObjectManager {
 
         std::stack<GarbageCollectionInfo> m_markedForGC;
 
-        std::map<int, v8::Persistent<v8::Object>*> m_idToObject;
+        std::map<int, v8::Persistent<v8::Object> *> m_idToObject;
 
         PersistentObjectIdSet m_released;
 
@@ -205,9 +215,9 @@ class ObjectManager {
 
         LRUCache<int, jweak> m_cache;
 
-        std::set<v8::Persistent<v8::Object>*> m_visitedPOs;
+        std::set<v8::Persistent<v8::Object> *> m_visitedPOs;
         std::vector<PersistentObjectIdPair> m_implObjWeak;
-        std::map<int, v8::Persistent<v8::Object>*> m_implObjStrong;
+        std::map<int, v8::Persistent<v8::Object> *> m_implObjStrong;
 
         volatile int m_currentObjectId;
 
@@ -231,7 +241,11 @@ class ObjectManager {
 
         jmethodID MAKE_INSTANCE_WEAK_AND_CHECK_IF_ALIVE_METHOD_ID;
 
+        jmethodID CLEAN_UP_MEMOIZED_WEAK_MAP_CACHE;
+
         jmethodID CHECK_ID_IS_WEAK;
+
+        jmethodID MOVE_FROM_STRONG_TO_WEAK;
 
         jmethodID CHECK_WEAK_OBJECTS_ARE_ALIVE_METHOD_ID;
 

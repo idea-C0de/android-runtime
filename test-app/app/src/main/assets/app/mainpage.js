@@ -17,9 +17,9 @@ __approot = __dirname.substr(0, __dirname.length - 4);
 
 var shared = require("./shared");
 shared.runRequireTests();
-shared.runWeakRefTests();
+//shared.runWeakRefTests();
 shared.runRuntimeTests();
-shared.runWorkerTests();
+//shared.runWorkerTests();
 require("./tests/tests");
 require("./tests/testMethodResolution");
 require("./tests/testMethodResolutionWithNulls");

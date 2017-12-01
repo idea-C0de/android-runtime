@@ -820,11 +820,13 @@ public class Runtime {
     @RuntimeCallable
     private boolean checkIdIsWeak(int javaObjectID) {
         if (idToWeakMapCache.isEmpty()) {
+            android.util.Log.w("~~~~~~~~ ########", "#### cache is empty");
             throw new InvalidParameterException("#### cache is empty");
         }
 
         Boolean id = idToWeakMapCache.get(javaObjectID);
         if (id == null) {
+            android.util.Log.w("~~~~~~~~ ########", "#### id is null");
             throw new InvalidParameterException("#### id is null");
         }
 
@@ -835,6 +837,7 @@ public class Runtime {
     private void moveFromStrongToWeak(int javaObjectID) {
         Object instance = strongInstances.get(javaObjectID);
         if (instance != null) {
+            q
             strongInstances.remove(javaObjectID);
             strongJavaObjectToID.remove(instance);
             weakJavaObjectToID.put(instance, javaObjectID);
@@ -843,10 +846,12 @@ public class Runtime {
     }
 
     @RuntimeCallable
-    private void makeInstanceWeakAndCheckIfAlive() {
+    private void cleanUpMemoizedWeakMapCache() {
         idToWeakMapCache = new HashMap<>();
+    }
 
-
+    @RuntimeCallable
+    private void makeInstanceWeakAndCheckIfAlive() {
         for (Integer key : weakInstances.keySet()) {
             WeakReference<Object> ref = weakInstances.get(key);
 

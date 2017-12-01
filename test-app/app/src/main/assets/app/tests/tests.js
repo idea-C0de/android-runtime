@@ -622,7 +622,7 @@ describe("Tests ", function () {
 		expect(file).toBe(file2);
 	});
 
-	it("TestWorkingWithJavaArrayDoesNotMakeMemoryLeak", function () {
+	xit("TestWorkingWithJavaArrayDoesNotMakeMemoryLeak", function () {
 		__log("TEST: TestWorkingWithJavaArrayDoesNotMakeMemoryLeak");
 
 		var size = 10 * 1024 * 1024;
