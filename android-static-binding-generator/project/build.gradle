@@ -23,7 +23,7 @@ if (workersExcludeFile.exists()) {
 	try {
 		webpackWorkersExcludesList = new JsonSlurper().parseText(workersExcludeFile.text)
 	} catch (all) {
-		println "Malformed workers exclude file at ${webpackWorkersExcludePath}"
+		logger.log("Malformed workers exclude file at ${webpackWorkersExcludePath}")
 	}
 }
 
@@ -40,7 +40,6 @@ if (project.hasProperty("outDir")) {
 def absoluteJsCodeDir;
 def jsCodeAbsolutePath;
 if (!project.hasProperty("test")) {
-	println project.jsCodeDir.equals(null)
 	if(project.jsCodeDir.exists()) {
 		absoluteJsCodeDir = project.jsCodeDir
 		jsCodeAbsolutePath = absoluteJsCodeDir.getAbsolutePath()
@@ -142,13 +141,13 @@ traverseDirectory = { dir, traverseExplicitly ->
 	}
 }
 
-task traverseJsFilesArgs { //(jsCodeDir, bindingsFilePath, interfaceNamesFilePath, jsParserPath, jsFilesParameter) {
+task traverseJsFilesArgs {
 	doLast {
 		jsCodeAbsolutePath = jsCodeDir;
 		inputJsFiles = new LinkedList<String>();
 		traverseDirectory(jsCodeDir, false);
 
-		new File(jsFilesParameter).withWriter { out ->
+		new File(jsFilesParametersPath).withWriter { out ->
 			inputJsFiles.each {out.println it}
 		}
 
@@ -158,7 +157,7 @@ task traverseJsFilesArgs { //(jsCodeDir, bindingsFilePath, interfaceNamesFilePat
 		list.add(jsCodeDir)
 		list.add(bindingsFilePath)
 		list.add(interfaceNamesFilePath)
-		list.add(jsFilesParameter)
+		list.add(jsFilesParametersPath)
 
 		logger.info("Task: traverseJsFilesArgs: executed with arguments: " + list.toString().replaceAll(',', ''))
 		def proc = list.execute()
@@ -167,8 +166,8 @@ task traverseJsFilesArgs { //(jsCodeDir, bindingsFilePath, interfaceNamesFilePat
 		proc.waitFor()
 
 		if (proc.exitValue()) {
-			println "gave the following error: "
-			println "[ERROR] ${proc.getErrorStream()}"
+			logger.info("gave the following error: ")
+			logger.info("[ERROR] ${proc.getErrorStream()}")
 		}
 	}
 }
@@ -224,18 +223,16 @@ class RunAstParserTask extends DefaultTask {
 
 	@TaskAction
 	void execute(IncrementalTaskInputs inputs) {
-		println inputs.incremental ? "Running incremental build" : "Running full build"
-
 		def runCommand = { strList ->
 			assert ( strList instanceof String || ( strList instanceof List && strList.each{ it instanceof String } ))
 			def proc = strList.execute()
-			proc.in.eachLine { line -> println line }
+			proc.in.eachLine { line -> logger.info(line) }
 			proc.out.close()
 			proc.waitFor()
 
 			if (proc.exitValue()) {
-				println "gave the following error: "
-				println "[ERROR] ${proc.getErrorStream()}"
+				logger.info("gave the following error: ")
+				logger.info("[ERROR] ${proc.getErrorStream()}")
 			}
 			// assert !proc.exitValue()
 		}
@@ -243,7 +240,6 @@ class RunAstParserTask extends DefaultTask {
 		def jsDependencies = new ArrayList<String>();
 		inputs.outOfDate { change ->
 			jsDependencies.add(change.getFile().getAbsolutePath())
-			// println change.getFile();
 		}
 		new File(jsFilesParametersPath).withWriter { out ->
 			jsDependencies.each {out.println it}
