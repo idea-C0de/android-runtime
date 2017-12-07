@@ -1,0 +1,11 @@
+/home/plamen5kov/work/repos/android-runtime/test-app/app/src/main/assets/app/simplesubmodule.js
+/home/plamen5kov/work/repos/android-runtime/test-app/app/src/main/assets/app/MyApp.js
+/home/plamen5kov/work/repos/android-runtime/test-app/app/src/main/assets/app/Infrastructure/timers.js
+/home/plamen5kov/work/repos/android-runtime/test-app/app/src/main/assets/app/Infrastructure/Jasmine/jasmine-reporters/junit_reporter.js
+/home/plamen5kov/work/repos/android-runtime/test-app/app/src/main/assets/app/Infrastructure/Jasmine/jasmine-reporters/terminal_reporter.js
+/home/plamen5kov/work/repos/android-runtime/test-app/app/src/main/assets/app/Infrastructure/Jasmine/jasmine-2.0.1/boot.js
+/home/plamen5kov/work/repos/android-runtime/test-app/app/src/main/assets/app/Infrastructure/Jasmine/jasmine-2.0.1/jasmine.js
+/home/plamen5kov/work/repos/android-runtime/test-app/app/src/main/assets/app/boot.js
+/home/plamen5kov/work/repos/android-runtime/test-app/app/src/main/assets/app/mainpage.js
+/home/plamen5kov/work/repos/android-runtime/test-app/app/src/main/assets/app/simplemodule.js
+/home/plamen5kov/work/repos/android-runtime/test-app/app/src/main/assets/app/MyActivity.js

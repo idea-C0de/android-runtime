@@ -1,0 +1,5 @@
+android.app.Application**onCreate*com.tns.NativeScriptApplication*MyApp.js*
+java.lang.Runnable*_fInfrastructure_timers_l12_c20__*run***
+java.lang.Runnable*_fInfrastructure_timers_l38_c20__*run***
+android.app.Activity**onCreate*com.tns.NativeScriptActivity*MyActivity.js*
+android.view.View.OnClickListener*_fMyActivity_l54_c32__AppClickListener*onClick***

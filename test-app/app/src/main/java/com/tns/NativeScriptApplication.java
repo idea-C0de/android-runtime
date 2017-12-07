@@ -1,29 +1,36 @@
 package com.tns;
 
-import android.app.Application;
-
-public class NativeScriptApplication extends Application {
-
-    private static NativeScriptApplication thiz;
+@com.tns.JavaScriptImplementation(javaScriptFile = "./MyApp.js")
+public class NativeScriptApplication extends android.app.Application implements com.tns.NativeScriptHashCodeProvider {
+    private static android.app.Application thiz;
 
     public NativeScriptApplication() {
+        super();
         thiz = this;
     }
 
-    public void onCreate() {
-        ManualInstrumentation.Frame frame = ManualInstrumentation.start("NaitveScriptApplication.onCreate");
-        try {
+    public void onCreate()  {
+        com.tns.Runtime runtime = RuntimeHelper.initRuntime(this);
+        if (!Runtime.isInitialized()) {
             super.onCreate();
-            com.tns.Runtime runtime = RuntimeHelper.initRuntime(this);
-            if (runtime != null) {
-                runtime.run();
-            }
-        } finally {
-            frame.close();
+            return;
+        }
+        java.lang.Object[] args = null;
+        com.tns.Runtime.callJSMethod(this, "onCreate", void.class, args);
+        if (runtime != null) {
+            runtime.run();
         }
     }
 
-    public static Application getInstance() {
+    public boolean equals__super(java.lang.Object other) {
+        return super.equals(other);
+    }
+
+    public int hashCode__super() {
+        return super.hashCode();
+    }
+
+    public static android.app.Application getInstance() {
         return thiz;
     }
 }
