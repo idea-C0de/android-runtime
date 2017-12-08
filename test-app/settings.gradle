@@ -1,2 +1,3 @@
-include ':app', ':runtime', ':runtime-binding-generator', ':static-binding-generator'
+include ':app', ':runtime', ':runtime-binding-generator', ':static-binding-generator', ':android-metadata-generator'
 project(':static-binding-generator').projectDir = new File('build-tools/static-binding-generator')
+project(':android-metadata-generator').projectDir = new File('build-tools/android-metadata-generator')

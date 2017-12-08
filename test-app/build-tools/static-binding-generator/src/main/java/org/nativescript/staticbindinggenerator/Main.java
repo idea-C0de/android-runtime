@@ -10,10 +10,13 @@ import java.io.PrintWriter;
 import java.nio.charset.Charset;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class Main {
+    public static final String SBG_INPUT_OUTPUT_DIRS = "sbg-input-output-dirs.txt";
+    public static final String SBG_BINDINGS_NAME = "sbg-bindings.txt";
+    public static final String SBG_JS_PARCED_FILES = "sbg-js-parced-files.txt";
+    public static final String SBG_INTERFACE_NAMES = "sbg-interfaces-names.txt";
     private static String jsCodeAbsolutePath;
     private static List<String> inputJsFiles = new ArrayList<>();
     private static File outputDir;
@@ -21,11 +24,8 @@ public class Main {
     private static String dependenciesFile;
 
     public static void main(String[] args) throws IOException, ClassNotFoundException {
-        if (args.length < 3) {
-            throw new IllegalArgumentException("Expects at least three arguments");
-        }
 
-        validateInput(args);
+        validateInput();
 
         //webpack specific excluded files
         getWorkerExcludeFile();
@@ -39,23 +39,25 @@ public class Main {
         runJsParser(inputDir);
 
         // generate java bindings
-        String inputBindingFilename = Paths.get(System.getProperty("user.dir"), "bindings.txt").toString();
+        String inputBindingFilename = Paths.get(System.getProperty("user.dir"), SBG_BINDINGS_NAME).toString();
         new Generator(outputDir, rows).writeBindings(inputBindingFilename);
     }
 
-    private static void validateInput(String[] args) {
-        dependenciesFile = args[0];
+    private static void validateInput() throws IOException {
+        dependenciesFile = "sbg-java-dependencies.txt";
         if (!(new File(dependenciesFile).exists())) {
             throw new IllegalArgumentException(String.format("Couldn't find input dependenciesFile file. Make sure the file %s is present.", dependenciesFile));
         }
 
-        inputDir = new File(args[1]);
+        List<DataRow> inputOutput = Generator.getRows(SBG_INPUT_OUTPUT_DIRS);
+        inputDir = new File(inputOutput.get(0).getRow());
         if (!inputDir.exists() || !inputDir.isDirectory()) {
             throw new IllegalArgumentException(String.format("Couldn't find the output dir %s or it wasn't a directory", inputDir.getAbsolutePath()));
         }
         jsCodeAbsolutePath = inputDir.getAbsolutePath();
 
-        outputDir = new File(args[2]);
+        //asd
+        outputDir = new File(inputOutput.get(1).getRow());
         if (!outputDir.exists() || !outputDir.isDirectory()) {
             System.out.println(String.format("Couldn't find the output dir %s or it wasn't a directory so it will be created!", outputDir.getAbsolutePath()));
             outputDir.mkdirs();
@@ -65,14 +67,14 @@ public class Main {
     private static void runJsParser(File inputDir) throws IOException {
         String parserPath = Paths.get(System.getProperty("user.dir"),"static-binding-generator", "jsparser", "js_parser.js").toString();
         String inputPath = inputDir.getAbsolutePath();
-        String bindingsFilePath = Paths.get(System.getProperty("user.dir"), "bindings.txt").toString();
-        String interfaceNamesFilePath = Paths.get(System.getProperty("user.dir"), "interfaces-names.txt").toString();
+        String bindingsFilePath = Paths.get(System.getProperty("user.dir"), SBG_BINDINGS_NAME).toString();
+        String interfaceNamesFilePath = Paths.get(System.getProperty("user.dir"), SBG_INTERFACE_NAMES).toString();
         try {
             traverseDirectory(inputDir, false/*traverse explicitly*/);
         } catch (JSONException e) {
             e.printStackTrace();
         }
-        String pathToJsFileParams = "jsFilesParameters.txt";
+        String pathToJsFileParams = SBG_JS_PARCED_FILES;
         PrintWriter pw = GetInterfaceNames.ensureOutputFile(pathToJsFileParams);
         pathToJsFileParams = Paths.get(System.getProperty("user.dir"), pathToJsFileParams).toString();
         for (String f : inputJsFiles) {

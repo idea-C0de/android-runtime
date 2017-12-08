@@ -5,7 +5,7 @@
 
 ///////////////// CONFIGURATION /////////////////
 
-var disableLogger = false;
+var disableLogger = true;
 if (process.env.AST_PARSER_DISABLE_LOGGING && process.env.AST_PARSER_DISABLE_LOGGING.trim() === "true") {
 	disableLogger = false;
 }
@@ -40,7 +40,8 @@ var fs = require("fs"),
 	interfacesDecoratorName = "Interfaces",
 	outFile = "out/out_parsed_typescript.txt", // default out file
 	inputDir = "input_parced_typescript", // default input folder
-	interfacesNamesFilePath = "../interfaces-names.txt", //default interace_names file path
+	SBG_INTERFACE_NAMES = "sbg-interface-names.txt",
+	interfacesNamesFilePath = "../" + SBG_INTERFACE_NAMES, //default interace_names file path
 	interfaceNames = [],
 	inputFiles = [];
 

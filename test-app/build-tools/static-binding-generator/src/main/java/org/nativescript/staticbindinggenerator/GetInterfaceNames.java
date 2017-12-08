@@ -13,15 +13,13 @@ import java.util.List;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
-import javax.xml.crypto.Data;
-
 public class GetInterfaceNames {
     private static String currentDir;
 
     public static void generateInterfaceFile(List<DataRow> rows)
     throws IOException, ClassNotFoundException {
         currentDir = System.getProperty("user.dir");
-        String outputFileName = "interfaces-names.txt";
+        String outputFileName = Main.SBG_INTERFACE_NAMES;
 
         PrintWriter out = ensureOutputFile(outputFileName);
 

@@ -12,6 +12,12 @@ dependencies {
 sourceCompatibility = "1.7"
 targetCompatibility = "1.7"
 
+task copyJarToBuildTools (type: Copy) {
+    inputs.dir("$projectDir/build/libs/static-binding-generator.jar")
+    from "$projectDir/build/libs/static-binding-generator.jar"
+    into "$projectDir/../"
+}
+
 jar {
     manifest {
         attributes("Manifest-Version": "1.0",
@@ -27,3 +33,5 @@ jar {
         }
     }
 }
+
+jar.finalizedBy(copyJarToBuildTools)

@@ -14,26 +14,35 @@
 *			-PbuildToolsVersion=[build_tools_version]
 *			-PsupportVersion=[support_version]
 *			-PcompileSdk=[compile_sdk_version]
-
-*			-PdontRunSbg=[true/false]
 */
 
 import groovy.json.JsonSlurper
 
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.jar.JarEntry;
-import java.util.jar.JarFile;
-
 apply plugin: "com.android.application"
 
-def metadataParams = new LinkedList <String> ()
-def allJarPaths = new LinkedList <String> ()
-def configStage = "\tconfig phase: "
-def nodeModulesDir = "../../node_modules/"
-def dependenciesJson = file("$rootDir/dependencies.json")
+//common
+def BUILD_TOOLS_PATH = "$rootDir/build-tools"
+def TYPINGS_PATH = "$BUILD_TOOLS_PATH/typings"
+def USER_PROJECT_ROOT = "$rootDir/../.."
+def PLATFORMS_ANDROID = "platforms/android"
+def PACKAGE_JSON = "package.json"
+
+//static binding generator
+def SBG_JAVA_DEPENDENCIES = "sbg-java-dependencies.txt"
+def SBG_INPUT_OUTPUT_DIRS = "sbg-input-output-dirs.txt"
+def SBG_JS_PARCED_FILES = "sbg-js-parced-files.txt"
+def SBG_BINDINGS_NAME = "sbg-bindings.txt"
+def SBG_INTERFACE_NAMES = "sbg-interface-names.txt"
+def INPUT_JS_DIR = "$projectDir/src/main/assets/app"
+def OUTPUT_JAVA_DIR = "$projectDir/src/main/java"
+
+//metadata generator
+def MDG_OUTPUT_DIR = "mdg-output-dir.txt"
+def MDG_JAVA_DEPENDENCIES = "mdg-java-dependencies.txt"
+def METADATA_OUT_PATH = "$projectDir/src/main/assets/metadata"
 
 // the build script will not work with previous versions of the CLI (3.1 or earlier)
+def dependenciesJson = file("$rootDir/dependencies.json")
 if (!dependenciesJson.exists()) {
     throw new BuildCancelledException("""
 'dependencies.json' file not found. Check whether the NativeScript CLI has prepared the project beforehand,
@@ -42,37 +51,23 @@ version of the {N} CLI install a previous version of the runtime package - 'tns 
 """)
 }
 
-project.ext.extractedDependenciesDir = "${project.buildDir}/exploded-dependencies";
+project.ext.extractedDependenciesDir = "${project.buildDir}/exploded-dependencies"
 def nativescriptDependencies = new JsonSlurper().parseText(dependenciesJson.text)
-
-def dontRunSbg = project.hasProperty("dontRunSbg");
 
 def computeCompileSdkVersion = { -> project.hasProperty("compileSdk") ? compileSdk : 26 }
 def computeTargetSdkVersion = { -> project.hasProperty("targetSdk") ? targetSdk : 26 }
-def computeBuildToolsVersion = { -> project.hasProperty("buildToolsVersion") ? buildToolsVersion : "26.0.1" }
+def computeBuildToolsVersion = { ->
+    project.hasProperty("buildToolsVersion") ? buildToolsVersion : "26.0.1"
+}
 
 project.ext.selectedBuildType = project.hasProperty("release") ? "release" : "debug"
-
-def renameResultApks = { variant ->
-    def name
-    variant.outputs.each { output ->
-        def apkDirectory = output.packageApplication.outputFile.parentFile
-        def abiName = "";
-        if (output.getFilter(com.android.build.OutputFile.ABI)) {
-            abiName = "-" + output.getFilter(com.android.build.OutputFile.ABI);
-        }
-        def apkNamePrefix = rootProject.name + "-" + variant.buildType.name + abiName
-        name = apkNamePrefix + ".apk"
-        output.packageApplication.outputFile = new File(apkDirectory, name);
-    }
-}
 
 ////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////// CONFIGURATIONS ///////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
 
 def applyAppGradleConfiguration = { ->
-    def pathToAppGradle = "$rootDir/../../app/App_Resources/Android/app.gradle"
+    def pathToAppGradle = "$USER_PROJECT_ROOT/app/App_Resources/Android/app.gradle"
     def appGradle = file(pathToAppGradle)
     if (appGradle.exists()) {
         println "\t + applying user-defined configuration from ${appGradle}"
@@ -128,12 +123,14 @@ def externalRuntimeExists = !findProject(':runtime').is(null)
 repositories {
 
     // used for local *.AAR files
-    def pluginDependencies = nativescriptDependencies.collect { "$rootDir/${it.directory}/platforms/android" }
-    if(!externalRuntimeExists) {
+    def pluginDependencies = nativescriptDependencies.collect {
+        "$rootDir/${it.directory}/$PLATFORMS_ANDROID"
+    }
+    if (!externalRuntimeExists) {
         pluginDependencies.add("libs/runtime-libs")
     }
 
-    if(pluginDependencies.size() > 0) {
+    if (pluginDependencies.size() > 0) {
         flatDir {
             dirs pluginDependencies
         }
@@ -149,6 +146,14 @@ dependencies {
     compile "com.android.support:support-v4:$supportVer"
     compile "com.android.support:appcompat-v7:$supportVer"
     debugCompile "com.android.support:design:$supportVer"
+
+    //for debugging purposes
+    if (!file("$BUILD_TOOLS_PATH/static-binding-generator.jar").exists()) {
+        compile project(":static-binding-generator")
+    }
+    if (!file("$BUILD_TOOLS_PATH/android-metadata-generator.jar").exists()) {
+        compile project(":android-metadata-generator")
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -157,13 +162,13 @@ dependencies {
 
 task addNativeScriptRuntimePackageDependency {
     def useV8Symbols = nativescriptDependencies.any {
-        def packageJsonPath = file("$rootDir/${it.directory}/package.json");
-        def packageJson = new JsonSlurper().parseText(packageJsonPath.text);
-        return packageJson.nativescript.useV8Symbols;
+        def packageJsonPath = file("$rootDir/${it.directory}/$PACKAGE_JSON")
+        def packageJson = new JsonSlurper().parseText(packageJsonPath.text)
+        return packageJson.nativescript.useV8Symbols
     }
 
-    if(!externalRuntimeExists) {
-        def runtime = useV8Symbols ? "nativescript-regular" : "nativescript-optimized";
+    if (!externalRuntimeExists) {
+        def runtime = useV8Symbols ? "nativescript-regular" : "nativescript-optimized"
         println "\t + adding nativescript runtime package dependency: $runtime"
         project.dependencies.add("compile", [name: runtime, ext: "aar"])
     } else {
@@ -173,7 +178,7 @@ task addNativeScriptRuntimePackageDependency {
 
 task addDependenciesFromNativeScriptPlugins {
     nativescriptDependencies.each { dep ->
-        def aarFiles = fileTree(dir: file("$rootDir/${dep.directory}/platforms/android"), include: ["**/*.aar"])
+        def aarFiles = fileTree(dir: file("$rootDir/${dep.directory}/$PLATFORMS_ANDROID"), include: ["**/*.aar"])
         aarFiles.each { aarFile ->
             def length = aarFile.name.length() - 4
             def fileName = aarFile.name[0..<length]
@@ -181,7 +186,7 @@ task addDependenciesFromNativeScriptPlugins {
             project.dependencies.add("compile", [name: fileName, ext: "aar"])
         }
 
-        def jarFiles = fileTree(dir: file("${dep.directory}/platforms/android"), include: ["**/*.jar"])
+        def jarFiles = fileTree(dir: file("${dep.directory}/$PLATFORMS_ANDROID"), include: ["**/*.jar"])
         jarFiles.each { jarFile ->
             println "\t + adding jar plugin dependency: " + jarFile.getAbsolutePath()
         }
@@ -190,56 +195,52 @@ task addDependenciesFromNativeScriptPlugins {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////// EXECUTUION PHASE /////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////
-
 tasks.whenTaskAdded({ org.gradle.api.DefaultTask currentTask ->
-    if(currentTask =~ /generate.+BuildConfig/ ) {
+    if (currentTask =~ /generate.+BuildConfig/) {
         currentTask.finalizedBy(extractAllJars)
         extractAllJars.finalizedBy(collectAllJars)
     }
-    if(currentTask =~ /compile.+JavaWithJavac/ ) {
+    if (currentTask =~ /compile.+JavaWithJavac/) {
         currentTask.dependsOn(runSbg)
         currentTask.finalizedBy(ensureMetadataOutDir)
         ensureMetadataOutDir.finalizedBy(buildMetadata)
     }
-    if(currentTask.equals("assembleDebug") || currentTask.equals("assembleRelease")) {
-        currentTask.finalizedBy("validateAppIdMatch");
+    if (currentTask.equals("assembleDebug") || currentTask.equals("assembleRelease")) {
+        currentTask.finalizedBy("validateAppIdMatch")
     }
 })
 
-task runSbg(type: JavaExec) {
-    workingDir "$rootDir/build-tools"
-    main "-jar"
+////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////// EXECUTUION PHASE /////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
 
-    def sbgParams = new LinkedList();
-    sbgParams.add("static-binding-generator.jar")
-    sbgParams.add("$rootDir/build-tools/java-dependencies.txt") //collected dependencies
-    sbgParams.add("$projectDir/src/main/assets/app") //input javascript dir
-    sbgParams.add("$projectDir/src/main/java") //output java dir
-    println sbgParams.toString();
-    args sbgParams.toArray()
+task runSbg(type: JavaExec) {
+    inputs.dir(INPUT_JS_DIR)
+    outputs.dir(OUTPUT_JAVA_DIR)
+
+    workingDir "$BUILD_TOOLS_PATH"
+    main "-jar"
+    args "static-binding-generator.jar"
 }
 
 task ensureMetadataOutDir {
     doLast {
-        def outputDir = file("$projectDir/metadata/output/assets/metadata")
+        def outputDir = file("$METADATA_OUT_PATH")
         outputDir.mkdirs()
     }
 }
 
-def explodeAar (File compileDependency, String outputDir) {
-    if(compileDependency.name.endsWith(".aar")) {
-        JarFile jar = new JarFile(compileDependency)
+def explodeAar(File compileDependency, String outputDir) {
+    if (compileDependency.name.endsWith(".aar")) {
+        java.util.jar.JarFile jar = new java.util.jar.JarFile(compileDependency)
         Enumeration enumEntries = jar.entries()
         while (enumEntries.hasMoreElements()) {
-            JarEntry file = (JarEntry) enumEntries.nextElement();
-            if(file.name.endsWith(".jar")) {
-                def f = new File(outputDir , file.name);
-                new File(f.parent).mkdirs();
-                InputStream is = jar.getInputStream(file);
-                FileOutputStream fos = new FileOutputStream(f);
+            java.util.jar.JarEntry file = (java.util.jar.JarEntry) enumEntries.nextElement()
+            if (file.name.endsWith(".jar")) {
+                def f = new File(outputDir, file.name)
+                new File(f.parent).mkdirs()
+                InputStream is = jar.getInputStream(file)
+                FileOutputStream fos = new FileOutputStream(f)
                 while (is.available() > 0) {
                     fos.write(is.read())
                 }
@@ -251,8 +252,7 @@ def explodeAar (File compileDependency, String outputDir) {
             }
         }
         jar.close()
-    }
-    else if(compileDependency.name.endsWith(".jar")) {
+    } else if (compileDependency.name.endsWith(".jar")) {
         copy {
             from compileDependency.absolutePath
             into outputDir
@@ -266,14 +266,14 @@ task extractAllJars {
 
     doLast {
         def iter = configurations.compile.resolvedConfiguration.resolvedArtifacts.iterator()
-        def dependencyCounter = 0;
-        while(iter.hasNext()) {
+        def dependencyCounter = 0
+        while (iter.hasNext()) {
             //declaring variable as specific class for getting code completion in Android Studio
-            org.gradle.api.internal.artifacts.DefaultResolvedArtifact nextDependency = iter.next();
+            org.gradle.api.internal.artifacts.DefaultResolvedArtifact nextDependency = iter.next()
 
-            def outputDir = java.nio.file.Paths.get(extractedDependenciesDir, ""+dependencyCounter).normalize().toString();
+            def outputDir = java.nio.file.Paths.get(extractedDependenciesDir, "" + dependencyCounter).normalize().toString()
             explodeAar(nextDependency.file, outputDir)
-            dependencyCounter++;
+            dependencyCounter++
         }
     }
 }
@@ -281,46 +281,41 @@ task extractAllJars {
 task collectAllJars {
     description "gathers all paths to jar dependencies before building metadata with them"
 
-    def sdkPath = android.sdkDirectory.getAbsolutePath();
+    def sdkPath = android.sdkDirectory.getAbsolutePath()
     def androidJar = sdkPath + "/platforms/" + android.compileSdkVersion + "/android.jar"
 
     doFirst {
-        configurations.compile.each { File dependencyFile ->
-            logger.info("Task: collectAllJars: dependency file: " + dependencyFile.getAbsolutePath())
-            allJarPaths.add(dependencyFile.getAbsolutePath())
-        }
-
-        allJarPaths.add(androidJar);
-
+        def allJarPaths = new LinkedList<String>()
+        allJarPaths.add(androidJar)
         def ft = fileTree(dir: extractedDependenciesDir, include: "**/*.jar")
         ft.each { currentJarFile ->
             allJarPaths.add(currentJarFile.getAbsolutePath())
         }
 
-        metadataParams.add("metadata-generator.jar");
-        metadataParams.add("$projectDir/metadata/output/assets/metadata");
-        def jars = new LinkedList<File>()
-        for (def i = 0; i < allJarPaths.size(); i++) {
-            metadataParams.add(allJarPaths.get(i));
-            def f = new File(allJarPaths.get(i))
-            if (f.getName().endsWith(".jar")) {
-                jars.add(f)
+        new File("$BUILD_TOOLS_PATH/$SBG_JAVA_DEPENDENCIES").withWriter { out ->
+            allJarPaths.each { out.println it }
+        }
+        new File("$BUILD_TOOLS_PATH/$MDG_JAVA_DEPENDENCIES").withWriter { out ->
+            allJarPaths.each {
+                if (it.endsWith(".jar")) {
+                    out.println it
+                }
             }
         }
-
-        new File("$rootDir/build-tools/java-dependencies.txt").withWriter { out ->
-            allJarPaths.each {out.println it}
+        new File("$BUILD_TOOLS_PATH/$SBG_INPUT_OUTPUT_DIRS").withWriter { out ->
+            out.println INPUT_JS_DIR
+            out.println OUTPUT_JAVA_DIR
         }
     }
 }
 
-task buildMetadata (type: JavaExec) {
+task buildMetadata(type: JavaExec) {
     description "builds metadata with provided jar dependencies"
 
-    inputs.files(allJarPaths)
+    inputs.files("$MDG_JAVA_DEPENDENCIES")
     inputs.dir("$buildDir/intermediates/classes")
 
-    outputs.files("metadata/output/assets/metadata/treeNodeStream.dat", "metadata/output/assets/metadata/treeStringsStream.dat", "metadata/output/assets/metadata/treeValueStream.dat")
+    outputs.files("$METADATA_OUT_PATH/treeNodeStream.dat", "$METADATA_OUT_PATH/treeStringsStream.dat", "$METADATA_OUT_PATH/treeValueStream.dat")
 
     doFirst {
         // get compiled classes to pass to metadata generator
@@ -330,61 +325,54 @@ task buildMetadata (type: JavaExec) {
         def classesSubDirs = new File(classesDir).listFiles()
         def selectedBuildType = project.ext.selectedBuildType
 
-        for (File subDir: classesSubDirs) {
-            if (!subDir.getName().equals(selectedBuildType)) {
-                def subDirBuildType = new File(subDir, selectedBuildType)
-                if (subDirBuildType.exists()) {
-                    metadataParams.add(subDirBuildType.getAbsolutePath());
-                }
+        def generatedClasses = new LinkedList<String>()
+        for (File subDir : classesSubDirs) {
+            if (subDir.getName().equals(selectedBuildType)) {
+                generatedClasses.add(subDir.getAbsolutePath())
             }
         }
 
-        def classesDirBuildType = new File(classesDir, selectedBuildType)
-        if (classesDirBuildType.exists()) {
-            metadataParams.add(classesDirBuildType.getAbsolutePath())
+        new File("$BUILD_TOOLS_PATH/$MDG_OUTPUT_DIR").withWriter { out ->
+            out.println "$METADATA_OUT_PATH"
         }
 
-        workingDir "$rootDir/build-tools"
+        new File("$BUILD_TOOLS_PATH/$MDG_JAVA_DEPENDENCIES").withWriterAppend { out ->
+            generatedClasses.each { out.println it }
+        }
+
+        workingDir "$BUILD_TOOLS_PATH"
         main "-jar"
 
-        logger.info("Task buildMetadata: Call metadata-generator.jar with arguments: " + metadataParams.toString().replaceAll(',', ''))
-        args metadataParams.toArray()
-    }
-
-    doLast {
-        copy {
-            from "$projectDir/metadata/output/assets/metadata"
-            into "$projectDir/src/main/assets/metadata"
-        }
+        args "android-metadata-generator.jar"
     }
 }
 
-task generateTypescriptDefinitions (type: JavaExec) {
-    def paramz = new ArrayList<String>();
+task generateTypescriptDefinitions(type: JavaExec) {
+    def paramz = new ArrayList<String>()
     def includeDirs = ["com.android.support", "/platforms/" + android.compileSdkVersion]
 
     doFirst {
-        delete "$rootDir/build-tools/typings"
+        delete "$TYPINGS_PATH"
 
-        workingDir "$rootDir/build-tools"
+        workingDir "$BUILD_TOOLS_PATH"
 
         main "-jar"
 
-        paramz.add("dts-generator.jar");
-        paramz.add("-input");
+        paramz.add("dts-generator.jar")
+        paramz.add("-input")
 
-        for (String jarPath: project.jarFiles) {
+        for (String jarPath : project.jarFiles) {
             // don't generate typings for runtime jars and classes
             if (shouldIncludeDirForTypings(jarPath, includeDirs)) {
-                paramz.add(jarPath);
+                paramz.add(jarPath)
             }
         }
 
-        paramz.add("-output");
-        paramz.add("typings");
+        paramz.add("-output")
+        paramz.add("typings")
 
         logger.info("Task generateTypescriptDefinitions: Call dts-generator.jar with arguments: " + paramz.toString().replaceAll(',', ''))
-        args paramz.toArray();
+        args paramz.toArray()
     }
 }
 
@@ -393,13 +381,13 @@ generateTypescriptDefinitions.onlyIf {
 }
 
 static def shouldIncludeDirForTypings(path, includeDirs) {
-    for (String p: includeDirs) {
+    for (String p : includeDirs) {
         if (path.indexOf(p) > -1) {
-            return true;
+            return true
         }
     }
 
-    return false;
+    return false
 }
 
 task copyTypings {
@@ -407,8 +395,8 @@ task copyTypings {
         println "Copied generated typings to application root level. Make sure to import android.d.ts in reference.d.ts"
 
         copy {
-            from "$rootDir/build-tools/typings"
-            into "$rootDir/../../"
+            from "$TYPINGS_PATH"
+            into "$USER_PROJECT_ROOT"
         }
     }
 }
@@ -417,8 +405,8 @@ copyTypings.onlyIf { generateTypescriptDefinitions.didWork }
 
 task validateAppIdMatch {
     doLast {
-        def packageJsonFile = new File("$rootDir/../../package.json");
-        def lineSeparator = System.getProperty("line.separator");
+        def packageJsonFile = new File("$USER_PROJECT_ROOT/$PACKAGE_JSON")
+        def lineSeparator = System.getProperty("line.separator")
 
         if (packageJsonFile.exists() && !project.hasProperty("release")) {
             String content = packageJsonFile.getText("UTF-8")
@@ -426,10 +414,10 @@ task validateAppIdMatch {
             def packageJsonMap = jsonSlurper.parseText(content)
 
             if (packageJsonMap.nativescript.id != android.defaultConfig.applicationId) {
-                def errorMessage = "${lineSeparator}WARNING: The Application identifier is different from the one inside 'package.json' file.$lineSeparator" +
+                def errorMessage = "${lineSeparator}WARNING: The Application identifier is different from the one inside $PACKAGE_JSON file.$lineSeparator" +
                         "NativeScript CLI might not work properly.$lineSeparator" +
-                        "Update the application identifier in package.json and app.gradle so that they match.";
-                logger.error(errorMessage);
+                        "Update the application identifier in $PACKAGE_JSON and app.gradle so that they match."
+                logger.error(errorMessage)
             }
         }
     }
@@ -440,29 +428,20 @@ task validateAppIdMatch {
 ////////////////////////////////////////////////////////////////////////////////////
 
 //////// custom clean ///////////
-task deleteMetadata (type: Delete){
-    delete "$projectDir/metadata/output", "$projectDir/src/main/assets/metadata"
+task cleanSbg(type: Delete) {
+    delete "$BUILD_TOOLS_PATH/$SBG_JS_PARCED_FILES",
+            "$BUILD_TOOLS_PATH/$SBG_JAVA_DEPENDENCIES",
+            "$BUILD_TOOLS_PATH/$SBG_INTERFACE_NAMES",
+            "$BUILD_TOOLS_PATH/$SBG_BINDINGS_NAME",
+            "$BUILD_TOOLS_PATH/$SBG_INPUT_OUTPUT_DIRS",
+            "$OUTPUT_JAVA_DIR/com/tns/gen"
 }
 
-task deleteFlavors (type: Delete){
-    doLast {
-        def srcDir = new File("$projectDir/src")
-        srcDir.listFiles().each({ f ->
-            def dirName = f.getName()
-            if (dirName != "main" &&
-                    dirName != "debug" &&
-                    dirName != "release")	{
-                delete f
-            }
-        })
-    }
+task cleanMdg(type: Delete) {
+    delete "$BUILD_TOOLS_PATH/$MDG_OUTPUT_DIR",
+            "$BUILD_TOOLS_PATH/$MDG_JAVA_DEPENDENCIES",
+            "$METADATA_OUT_PATH"
 }
 
-task deleteGeneratedBindings(type: Delete) {
-    delete "$projectDir/src/main/java/com/tns/gen"
-}
-
-//deleteMetadata.dependsOn(":static-binding-generator:clean")
-deleteFlavors.dependsOn(deleteMetadata)
-deleteGeneratedBindings.dependsOn(deleteFlavors)
-clean.dependsOn(deleteGeneratedBindings)
+cleanSbg.dependsOn(cleanMdg)
+clean.dependsOn(cleanSbg)
