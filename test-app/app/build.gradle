@@ -146,14 +146,6 @@ dependencies {
     compile "com.android.support:support-v4:$supportVer"
     compile "com.android.support:appcompat-v7:$supportVer"
     debugCompile "com.android.support:design:$supportVer"
-
-    //for debugging purposes
-    if (!file("$BUILD_TOOLS_PATH/static-binding-generator.jar").exists()) {
-        compile project(":static-binding-generator")
-    }
-    if (!file("$BUILD_TOOLS_PATH/android-metadata-generator.jar").exists()) {
-        compile project(":android-metadata-generator")
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
